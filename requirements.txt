@@ -1,0 +1,10 @@
+mediapipe==0.10.9
+opencv-python
+numpy
+pandas
+pyyaml
+tqdm
+torch
+torchvision
+scikit-learn
+joblib
