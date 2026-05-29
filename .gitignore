@@ -1,13 +1,55 @@
-# entornos / caches
+# ===== Python / Entornos =====
 .venv/
 venv/
+env/
+ENV/
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# datos (no subir)
+# ===== Jupyter / notebooks =====
+.ipynb_checkpoints/
+
+# ===== VS Code / IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== Sistema =====
+.DS_Store
+Thumbs.db
+
+# ===== Logs / temporales =====
+*.log
+pip-log.txt
+
+# ===== Datos del proyecto =====
+# Queremos subir a GitHub los keypoints y metadata (para entrenar en equipo),
+# pero NO los videos/frames crudos (muy pesados).
 data/raw_frames/
 data/raw_videos/
-data/keypoints_v1/
-data/metadata/
-data/*.npy
-data/*.h5
+data/*.mp4
+data/*.avi
+data/*.mov
+
+# Permitir data/ y sus subcarpetas útiles
+!data/
+!data/README.md
+!data/keypoints_v1/**
+!data/metadata/**
+
+# ===== Archivos de salida / artefactos grandes =====
+# (opcional) si no quieres subir modelos entrenados:
+# models/*.keras
+# models/*_mapping.json
+
+# ===== Audio generados =====
+*.mp3
+*.wav
