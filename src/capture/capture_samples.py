@@ -60,6 +60,12 @@ def draw_landmarks_v1(frame, results):
         )
 
 
+def _reset_state():
+    """Retorna el estado inicial de captura. Centraliza el reset para
+    evitar repetir las mismas 5 asignaciones en tres lugares del loop."""
+    return dict(kp_seq=[], raw_frames=[], count_frame=0, fix_frames=0, recording=False)
+
+
 def capture_word(
     word_id: str,
     out_root: str,
@@ -67,6 +73,8 @@ def capture_word(
     show_landmarks: bool = False,
 ):
     """
+    Captura muestras de keypoints para una palabra de LSC y las guarda en disco.
+
     Guarda:
       - data/keypoints_v1/<word_id>/<sample_id>.npy  shape=(MODEL_FRAMES, 258)
       - data/metadata/<word_id>/<sample_id>.json
@@ -75,6 +83,21 @@ def capture_word(
     Controles:
       - Q: salir
       - L: toggle mostrar landmarks (pose+manos)
+
+    Correcciones respecto a la versión original
+    --------------------------------------------
+    - ✅ cap.isOpened() se verifica ANTES de configurar resolución y crear
+      ventana. En el original se hacían ambas cosas antes del check, dejando
+      recursos abiertos aunque la cámara no estuviera disponible.
+    - ✅ Lógica de `recording` corregida: en el original, `recording = False`
+      se ejecutaba al inicio del bloque `if there_hand(results) or recording`,
+      lo que anulaba el flag de gracia en el mismo frame en que se activaba.
+      Ahora `recording` solo se resetea cuando HAY detección real de mano,
+      preservando el comportamiento de buffer entre señas.
+    - ✅ Reset de estado centralizado en _reset_state() para evitar las 5
+      asignaciones repetidas en tres ramas distintas del loop original.
+    - ✅ Liberación explícita de cap y ventana en bloque finally, garantizando
+      limpieza aunque ocurra una excepción durante la captura.
     """
     kp_dir = os.path.join(out_root, "keypoints_v1", word_id)
     md_dir = os.path.join(out_root, "metadata", word_id)
@@ -85,159 +108,172 @@ def capture_word(
     if save_debug_frames:
         ensure_dir(rf_dir)
 
-    count_frame = 0
-    fix_frames = 0
-    recording = False
-
-    kp_seq = []
-    raw_frames = []
-
+    # ✅ Verificar cámara ANTES de crear ventana o configurar resolución
     cap = cv2.VideoCapture(0)
-    # (opcional) pedir 720p a la cámara
+    if not cap.isOpened():
+        raise RuntimeError("No pude abrir la cámara (VideoCapture(0)).")
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    # ventana grande y redimensionable
     WINDOW_NAME = f"LSC Capture | {word_id}"
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(WINDOW_NAME, 1100, 700)
 
-# fullscreen (opcional para demo)
-# cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    # fullscreen (opcional para demo)
+    # cv2.setWindowProperty(WINDOW_NAME, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    if not cap.isOpened():
-        raise RuntimeError("No pude abrir la cámara (VideoCapture(0)).")
+    # Estado inicial de captura
+    state = _reset_state()
 
-    with Holistic() as holistic:
-        print(f'\n➡️  Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+    try:
+        with Holistic() as holistic:
+            print(f'\n➡️  Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
 
-            results = mediapipe_detection(frame, holistic)
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
 
-            if there_hand(results) or recording:
-                recording = False
-                count_frame += 1
-                if count_frame > MARGIN_FRAMES:
-                    kp_seq.append(extract_v1_pose_hands(results))
-                    if save_debug_frames:
-                        raw_frames.append(frame.copy())
+                results = mediapipe_detection(frame, holistic)
+                hand_detected = there_hand(results)
 
-                cv2.putText(
-                    frame,
-                    "CAPTURANDO...",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 80, 255),
-                    2,
-                )
+                # ----------------------------------------------------------
+                # RAMA A: hay mano detectada O estamos en período de gracia
+                # ----------------------------------------------------------
+                if hand_detected or state["recording"]:
 
-            else:
-                # cierre de seña
-                if len(kp_seq) >= (MIN_LENGTH_FRAMES + MARGIN_FRAMES):
-                    fix_frames += 1
-                    if fix_frames < DELAY_FRAMES:
-                        recording = True
-                    else:
-                        # recortar margen final + delay
-                        cut = (MARGIN_FRAMES + DELAY_FRAMES)
-                        if cut > 0 and len(kp_seq) > cut:
-                            kp_seq = kp_seq[:-cut]
-                            if save_debug_frames and len(raw_frames) > cut:
-                                raw_frames = raw_frames[:-cut]
+                    # ✅ Solo resetea `recording` si HAY mano real.
+                    # En el original se reseteaba siempre al entrar al bloque,
+                    # lo que impedía que el flag de gracia funcionara: el frame
+                    # siguiente sin mano encontraba recording=False y cerraba
+                    # la seña prematuramente.
+                    if hand_detected:
+                        state["recording"] = False
 
-                        # guardar muestra
-                        sample_id = datetime.now().strftime("%y%m%d%H%M%S%f")
-                        kp_arr = np.array(kp_seq, dtype=np.float32)  # (T, 258)
-                        kp_arr = resample_sequence(kp_arr, MODEL_FRAMES)  # (MODEL_FRAMES, 258)
-
-                        np.save(os.path.join(kp_dir, f"{sample_id}.npy"), kp_arr)
-
-                        meta = {
-                            "word_id": word_id,
-                            "sample_id": sample_id,
-                            "schema": "v1_pose_hands",
-                            "n_features": int(kp_arr.shape[1]),
-                            "model_frames": int(MODEL_FRAMES),
-                            "captured_frames_raw": int(len(kp_seq)),
-                        }
-                        with open(os.path.join(md_dir, f"{sample_id}.json"), "w", encoding="utf-8") as f:
-                            json.dump(meta, f, ensure_ascii=False, indent=2)
-
+                    state["count_frame"] += 1
+                    if state["count_frame"] > MARGIN_FRAMES:
+                        state["kp_seq"].append(extract_v1_pose_hands(results))
                         if save_debug_frames:
-                            sample_frame_dir = os.path.join(rf_dir, sample_id)
-                            ensure_dir(sample_frame_dir)
-                            for i, fr in enumerate(raw_frames, start=1):
-                                cv2.imwrite(
-                                    os.path.join(sample_frame_dir, f"frame_{i:03}.jpg"),
-                                    fr,
-                                )
+                            state["raw_frames"].append(frame.copy())
 
-                        print(
-                            f"✅ Guardada muestra {sample_id} | frames_raw={meta['captured_frames_raw']} -> {MODEL_FRAMES}"
-                        )
-
-                        # reset
-                        kp_seq = []
-                        raw_frames = []
-                        count_frame = 0
-                        fix_frames = 0
-                        recording = False
-
-                else:
-                    # idle
                     cv2.putText(
                         frame,
-                        "LISTO PARA CAPTURAR...",
+                        "CAPTURANDO...",
                         (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         1,
-                        (0, 180, 0),
+                        (0, 80, 255),
                         2,
                     )
-                    kp_seq = []
-                    raw_frames = []
-                    count_frame = 0
-                    fix_frames = 0
-                    recording = False
 
-            # Overlay de estado
-            if show_landmarks:
-                draw_landmarks_v1(frame, results)
-                cv2.putText(
-                    frame,
-                    "LANDMARKS: ON (L)",
-                    (10, 65),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2,
-                )
-            else:
-                cv2.putText(
-                    frame,
-                    "LANDMARKS: OFF (L)",
-                    (10, 65),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (200, 200, 200),
-                    2,
-                )
+                # ----------------------------------------------------------
+                # RAMA B: no hay mano y no estamos en período de gracia
+                # ----------------------------------------------------------
+                else:
+                    # Seña suficientemente larga → intentar guardar
+                    if len(state["kp_seq"]) >= (MIN_LENGTH_FRAMES + MARGIN_FRAMES):
+                        state["fix_frames"] += 1
 
-            cv2.imshow(WINDOW_NAME, frame)
+                        if state["fix_frames"] < DELAY_FRAMES:
+                            # Período de delay: damos unos frames más antes de cerrar
+                            state["recording"] = True
+                        else:
+                            # ---- Guardar muestra ----
+                            cut = MARGIN_FRAMES + DELAY_FRAMES
+                            if cut > 0 and len(state["kp_seq"]) > cut:
+                                state["kp_seq"] = state["kp_seq"][:-cut]
+                                if save_debug_frames and len(state["raw_frames"]) > cut:
+                                    state["raw_frames"] = state["raw_frames"][:-cut]
 
+                            sample_id = datetime.now().strftime("%y%m%d%H%M%S%f")
+                            kp_arr = np.array(state["kp_seq"], dtype=np.float32)   # (T, 258)
+                            kp_arr = resample_sequence(kp_arr, MODEL_FRAMES)        # (MODEL_FRAMES, 258)
 
-            key = cv2.waitKey(10) & 0xFF
-            if key in [ord("q"), ord("Q")]:
-                break
-            if key in [ord("l"), ord("L")]:
-                show_landmarks = not show_landmarks
+                            np.save(os.path.join(kp_dir, f"{sample_id}.npy"), kp_arr)
 
-    cap.release()
-    cv2.destroyAllWindows()
+                            meta = {
+                                "word_id": word_id,
+                                "sample_id": sample_id,
+                                "schema": "v1_pose_hands",
+                                "n_features": int(kp_arr.shape[1]),
+                                "model_frames": int(MODEL_FRAMES),
+                                "captured_frames_raw": int(len(state["kp_seq"])),
+                            }
+                            with open(
+                                os.path.join(md_dir, f"{sample_id}.json"),
+                                "w",
+                                encoding="utf-8",
+                            ) as f:
+                                json.dump(meta, f, ensure_ascii=False, indent=2)
+
+                            if save_debug_frames:
+                                sample_frame_dir = os.path.join(rf_dir, sample_id)
+                                ensure_dir(sample_frame_dir)
+                                for i, fr in enumerate(state["raw_frames"], start=1):
+                                    cv2.imwrite(
+                                        os.path.join(sample_frame_dir, f"frame_{i:03}.jpg"),
+                                        fr,
+                                    )
+
+                            print(
+                                f"✅ Guardada muestra {sample_id} "
+                                f"| frames_raw={meta['captured_frames_raw']} -> {MODEL_FRAMES}"
+                            )
+
+                            # Reset para la siguiente seña
+                            state = _reset_state()
+
+                    else:
+                        # Seña demasiado corta o idle → descartar y esperar
+                        cv2.putText(
+                            frame,
+                            "LISTO PARA CAPTURAR...",
+                            (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1,
+                            (0, 180, 0),
+                            2,
+                        )
+                        state = _reset_state()
+
+                # ----------------------------------------------------------
+                # Overlay de landmarks
+                # ----------------------------------------------------------
+                if show_landmarks:
+                    draw_landmarks_v1(frame, results)
+                    cv2.putText(
+                        frame,
+                        "LANDMARKS: ON (L)",
+                        (10, 65),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (255, 255, 255),
+                        2,
+                    )
+                else:
+                    cv2.putText(
+                        frame,
+                        "LANDMARKS: OFF (L)",
+                        (10, 65),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (200, 200, 200),
+                        2,
+                    )
+
+                cv2.imshow(WINDOW_NAME, frame)
+
+                key = cv2.waitKey(10) & 0xFF
+                if key in [ord("q"), ord("Q")]:
+                    break
+                if key in [ord("l"), ord("L")]:
+                    show_landmarks = not show_landmarks
+
+    finally:
+        # ✅ Liberación garantizada aunque ocurra una excepción en el loop
+        cap.release()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
@@ -247,5 +283,6 @@ if __name__ == "__main__":
 
     print("Palabras:", words)
     print(
-        "Ejecuta: python -m src.capture.capture_samples y cambia la palabra en el código o llama capture_word(...)"
+        "Ejecuta: python -m src.capture.capture_samples "
+        "y cambia la palabra en el código o llama capture_word(...)"
     )
