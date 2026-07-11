@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 from mediapipe.python.solutions.holistic import Holistic
 
+from src.features.normalize import normalize_pose_hands
+
 
 def mediapipe_detection(frame_bgr: np.ndarray, model: Holistic):
     """
@@ -57,7 +59,8 @@ def there_hand(results) -> bool:
 
 def extract_v1_pose_hands(results) -> np.ndarray:
     """
-    Extrae y concatena los keypoints de pose y manos en un vector plano.
+    Extrae, normaliza y concatena los keypoints de pose y manos en un
+    vector plano.
 
     Schema v1:
       - Pose   : 33 landmarks × 4 valores (x, y, z, visibility) = 132
@@ -66,10 +69,29 @@ def extract_v1_pose_hands(results) -> np.ndarray:
       ---------------------------------------------------------------
       Total    : 258 features
 
+    Normalización espacial
+    ----------------------
+    Después de extraer las coordenadas crudas de MediaPipe (relativas al
+    frame de la cámara), se aplica normalize_pose_hands() para hacer el
+    vector invariante a:
+      - la POSICIÓN de la persona en el encuadre (traslación al centro
+        de los hombros)
+      - la DISTANCIA a la cámara / escala (división por distancia entre
+        hombros)
+
+    Esto es CRÍTICO para la robustez en vivo: sin ello, el modelo aprende
+    posiciones absolutas del set de entrenamiento y falla cuando el usuario
+    se para en otra posición o a otra distancia de la cámara.
+
+    IMPORTANTE: esta normalización debe aplicarse de forma idéntica en
+    captura (capture_samples.py) e inferencia (live.py). Como ambos llaman
+    a esta misma función, la consistencia queda garantizada por construcción.
+
     Retorna
     -------
-    np.ndarray de shape (258,), dtype float32.
-    Rellena con ceros las partes no detectadas (pose o manos ausentes).
+    np.ndarray de shape (258,), dtype float32, normalizado.
+    Rellena con ceros las partes no detectadas (pose o manos ausentes);
+    los ceros se preservan sin normalizar como señal de "ausente".
     """
     # --- Pose (33 * 4 = 132) ---
     if results.pose_landmarks:
@@ -98,4 +120,7 @@ def extract_v1_pose_hands(results) -> np.ndarray:
     else:
         rh = np.zeros(21 * 3, dtype=np.float32)
 
-    return np.concatenate([pose, lh, rh])  # (258,)
+    # --- Normalización espacial (invarianza a posición y escala) ---
+    pose, lh, rh = normalize_pose_hands(pose, lh, rh)
+
+    return np.concatenate([pose, lh, rh])  # (258,) normalizado

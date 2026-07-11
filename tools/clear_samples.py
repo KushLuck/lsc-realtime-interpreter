@@ -5,7 +5,7 @@ Herramienta interactiva para eliminar muestras capturadas de LSC.
 Modos de uso
 ------------
 1. Eliminar TODO el dataset (reset completo):
-       python -m tools.clear_samples --all
+       python -m tools.cle
 
 2. Eliminar todas las muestras de una palabra específica:
        python -m tools.clear_samples --word adios
