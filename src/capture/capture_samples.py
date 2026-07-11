@@ -279,7 +279,7 @@ def capture_word(
 if __name__ == "__main__":
     words = load_words(os.path.join("models", "words.json"))
     # prueba rápida con una palabra:
-    capture_word("buenos_dias", out_root="data", save_debug_frames=False, show_landmarks=True)
+    capture_word("hola", out_root="data", save_debug_frames=False, show_landmarks=True)
 
     print("Palabras:", words)
     print(

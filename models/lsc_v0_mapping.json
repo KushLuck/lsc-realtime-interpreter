@@ -1,12 +1,13 @@
 {
   "used_words": [
     "hola",
-    "adios"
+    "buenos_dias"
   ],
   "word_to_idx": {
     "hola": 0,
-    "adios": 1
+    "buenos_dias": 1
   },
   "timesteps": 30,
-  "n_features": 258
+  "n_features": 258,
+  "n_classes": 2
 }
