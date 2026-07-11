@@ -4,7 +4,6 @@ Proyecto desarrollado en el marco del **Semillero SEA–UN (Universidad Nacional
 Director del semillero: **Prof. Mario Enrique Arrieta-Prieto**.
 
 ## Equipo
-Santiago Estipia
 **Líder:** Juan Fernando Pineda — jpinedap@unal.edu.co  
 Juan Ángel Beltrán Gómez — jubeltrango@unal.edu.co  
 David Felipe Ángel Herrera — dangelh@unal.edu.co  
