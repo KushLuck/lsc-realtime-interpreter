@@ -142,7 +142,7 @@ def main(
 
     try:
         # ✅ model_complexity=0 para acelerar (debe coincidir con capture_samples.py)
-        with Holistic(model_complexity=0) as holistic:
+        with Holistic(model_complexity=1) as holistic:
             print("\n➡️  Live inference ON | Q = salir\n")
 
             while True:

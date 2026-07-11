@@ -148,7 +148,7 @@ def capture_word(
 
     try:
         # ✅ model_complexity=0 para acelerar (debe coincidir con live.py)
-        with Holistic(model_complexity=0) as holistic:
+        with Holistic(model_complexity=1) as holistic:
             print(f'\n➡️  Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
 
             while True:

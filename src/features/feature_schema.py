@@ -10,5 +10,5 @@ class SchemaV1:
 # Para v0 recomiendo 30 frames por seña (más robusto que 15)
 MODEL_FRAMES = 30
 MIN_LENGTH_FRAMES = 8   # mínimo real antes de aceptar muestra (sin contar margen)
-MARGIN_FRAMES = 1
-DELAY_FRAMES = 3
+MARGIN_FRAMES = 2
+DELAY_FRAMES = 10

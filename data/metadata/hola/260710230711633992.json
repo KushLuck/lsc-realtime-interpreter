@@ -1,8 +1,0 @@
-{
-  "word_id": "hola",
-  "sample_id": "260710230711633992",
-  "schema": "v1_pose_hands",
-  "n_features": 258,
-  "model_frames": 30,
-  "captured_frames_raw": 71
-}
