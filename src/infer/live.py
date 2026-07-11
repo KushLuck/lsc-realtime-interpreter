@@ -38,7 +38,7 @@ def load_mapping(path: str = "models/lsc_v0_mapping.json") -> dict:
 
 
 def _reset_state() -> dict:
-    return dict(kp_seq=[], count_frame=0, fix_frames=0, recording=False)
+    return dict(kp_seq=[], count_frame=0, fix_frames=0)
 
 
 def main(
@@ -127,13 +127,11 @@ def main(
                 hand_detected = there_hand(results)
 
                 # ------------------------------------------------------
-                # RAMA A: hay mano O estamos en gracia
+                # RAMA A: hay mano
                 # ------------------------------------------------------
-                if hand_detected or state["recording"]:
-                    # La mano reaparecio: sal de gracia y reinicia el conteo.
-                    if hand_detected:
-                        state["recording"] = False
-                        state["fix_frames"] = 0
+                if hand_detected:
+                    # La mano reaparecio: reinicia el conteo de cierre.
+                    state["fix_frames"] = 0
 
                     state["count_frame"] += 1
                     if state["count_frame"] > MARGIN_FRAMES:
@@ -145,15 +143,30 @@ def main(
                     )
 
                 # ------------------------------------------------------
-                # RAMA B: no hay mano y no estamos en gracia
+                # RAMA B: no hay mano
                 # ------------------------------------------------------
                 else:
-                    if len(state["kp_seq"]) >= (MIN_LENGTH_FRAMES + MARGIN_FRAMES):
+                    # Tolera parpadeos de MediaPipe tambien antes de llegar
+                    # a la longitud minima; no cortes el inicio de la sena.
+                    if 0 < len(state["kp_seq"]) < MIN_LENGTH_FRAMES:
+                        state["fix_frames"] += 1
+                        if state["fix_frames"] < DELAY_FRAMES:
+                            h, w = frame.shape[:2]
+                            cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
+                            cv2.putText(
+                                frame, " | ".join(sentence), (10, 75),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2,
+                            )
+                            cv2.imshow(WINDOW_NAME, frame)
+                            if cv2.waitKey(10) & 0xFF in [ord("q"), ord("Q")]:
+                                break
+                            continue
+
+                    if len(state["kp_seq"]) >= MIN_LENGTH_FRAMES:
                         state["fix_frames"] += 1
 
                         # Gracia: espera DELAY_FRAMES antes de inferir.
                         if state["fix_frames"] < DELAY_FRAMES:
-                            state["recording"] = True
                             # Render + teclas antes de saltar
                             h, w = frame.shape[:2]
                             cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
@@ -167,10 +180,6 @@ def main(
                             continue
 
                         # ---- Inferencia ----
-                        cut = MARGIN_FRAMES + DELAY_FRAMES
-                        if cut > 0 and len(state["kp_seq"]) > cut:
-                            state["kp_seq"] = state["kp_seq"][:-cut]
-
                         kp_arr = np.array(state["kp_seq"], dtype=np.float32)
                         kp_arr = resample_sequence(kp_arr, MODEL_FRAMES)
 

@@ -53,7 +53,7 @@ def draw_landmarks_v1(frame, results):
 
 def _reset_state():
     """Estado inicial de captura."""
-    return dict(kp_seq=[], raw_frames=[], count_frame=0, fix_frames=0, recording=False)
+    return dict(kp_seq=[], raw_frames=[], count_frame=0, fix_frames=0)
 
 
 def capture_word(
@@ -137,14 +137,12 @@ def capture_word(
                 hand_detected = there_hand(results)
 
                 # ----------------------------------------------------------
-                # RAMA A: hay mano O estamos en periodo de gracia
+                # RAMA A: hay mano
                 # ----------------------------------------------------------
-                if hand_detected or state["recording"]:
-                    # La mano reaparecio: sal de gracia y REINICIA el conteo
-                    # de cierre. Asi solo una ausencia CONTINUA cierra la sena.
-                    if hand_detected:
-                        state["recording"] = False
-                        state["fix_frames"] = 0
+                if hand_detected:
+                    # La mano reaparecio: reinicia el conteo de cierre. Asi
+                    # solo una ausencia CONTINUA de manos cierra la sena.
+                    state["fix_frames"] = 0
 
                     state["count_frame"] += 1
                     if state["count_frame"] > MARGIN_FRAMES:
@@ -158,16 +156,29 @@ def capture_word(
                     )
 
                 # ----------------------------------------------------------
-                # RAMA B: no hay mano y no estamos en gracia
+                # RAMA B: no hay mano
                 # ----------------------------------------------------------
                 else:
-                    if len(state["kp_seq"]) >= (MIN_LENGTH_FRAMES + MARGIN_FRAMES):
+                    # Si MediaPipe parpadea al comienzo de la sena, no
+                    # descartarla de inmediato. Aplicar la misma gracia que
+                    # a una secuencia que ya alcanzo la longitud minima.
+                    if 0 < len(state["kp_seq"]) < MIN_LENGTH_FRAMES:
+                        state["fix_frames"] += 1
+                        if state["fix_frames"] < DELAY_FRAMES:
+                            cv2.imshow(WINDOW_NAME, frame)
+                            key = cv2.waitKey(10) & 0xFF
+                            if key in [ord("q"), ord("Q")]:
+                                break
+                            if key in [ord("l"), ord("L")]:
+                                show_landmarks = not show_landmarks
+                            continue
+
+                    if len(state["kp_seq"]) >= MIN_LENGTH_FRAMES:
                         state["fix_frames"] += 1
 
                         # Periodo de gracia: espera DELAY_FRAMES antes de cerrar.
                         # `continue` (como el original) salta al siguiente frame.
                         if state["fix_frames"] < DELAY_FRAMES:
-                            state["recording"] = True
                             cv2.imshow(WINDOW_NAME, frame)
                             key = cv2.waitKey(10) & 0xFF
                             if key in [ord("q"), ord("Q")]:
@@ -177,12 +188,6 @@ def capture_word(
                             continue
 
                         # ---- Guardar muestra ----
-                        cut = MARGIN_FRAMES + DELAY_FRAMES
-                        if cut > 0 and len(state["kp_seq"]) > cut:
-                            state["kp_seq"] = state["kp_seq"][:-cut]
-                            if save_debug_frames and len(state["raw_frames"]) > cut:
-                                state["raw_frames"] = state["raw_frames"][:-cut]
-
                         sample_id = datetime.now().strftime("%y%m%d%H%M%S%f")
                         kp_arr = np.array(state["kp_seq"], dtype=np.float32)   # (T, 258)
                         kp_arr = resample_sequence(kp_arr, MODEL_FRAMES)        # (MODEL_FRAMES, 258)
@@ -223,7 +228,7 @@ def capture_word(
                         if len(state["kp_seq"]) > 0:
                             print(
                                 f"[!] Descartada: {len(state['kp_seq'])} frames "
-                                f"(minimo requerido: {MIN_LENGTH_FRAMES + MARGIN_FRAMES})"
+                                f"(minimo requerido: {MIN_LENGTH_FRAMES})"
                             )
                         cv2.putText(
                             frame, "LISTO PARA CAPTURAR...", (10, 30),
@@ -260,5 +265,5 @@ def capture_word(
 
 if __name__ == "__main__":
     words = load_words(os.path.join("models", "words.json"))
-    capture_word("hola", out_root="data", save_debug_frames=False, show_landmarks=True)
+    capture_word("Gracias", out_root="data", save_debug_frames=False, show_landmarks=True)
     print("Palabras:", words)
