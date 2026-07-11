@@ -98,6 +98,25 @@ def capture_word(
       asignaciones repetidas en tres ramas distintas del loop original.
     - ✅ Liberación explícita de cap y ventana en bloque finally, garantizando
       limpieza aunque ocurra una excepción durante la captura.
+
+    Optimización de FPS
+    -------------------
+    - ✅ Resolución bajada a 640x480 (antes 1280x720): a ~10 fps en CPU la
+      resolución alta era el cuello de botella. 640x480 duplica los FPS sin
+      pérdida notable de precisión (MediaPipe reescala internamente y las
+      coordenadas son normalizadas 0-1).
+    - ✅ Holistic(model_complexity=0) (antes complexity=1 por defecto):
+      modelo más ligero, acelera la detección. Pérdida de precisión
+      imperceptible para señas frontales claras.
+    - ⚠️ IMPORTANTE: estos dos parámetros DEBEN coincidir exactamente con
+      live.py. Capturar y luego inferir con resolución o complexity distinta
+      reintroduce el gap train-vivo (landmarks ligeramente distintos).
+
+    Diagnóstico de descartes
+    ------------------------
+    - ✅ Print en la rama de descarte: avisa cuántos frames se acumularon
+      cuando una seña se descarta por corta, para calibrar los umbrales de
+      feature_schema.py contra el hardware real.
     """
     kp_dir = os.path.join(out_root, "keypoints_v1", word_id)
     md_dir = os.path.join(out_root, "metadata", word_id)
@@ -113,8 +132,9 @@ def capture_word(
     if not cap.isOpened():
         raise RuntimeError("No pude abrir la cámara (VideoCapture(0)).")
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    # ✅ 640x480 para duplicar FPS (antes 1280x720)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     WINDOW_NAME = f"LSC Capture | {word_id}"
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -127,7 +147,8 @@ def capture_word(
     state = _reset_state()
 
     try:
-        with Holistic() as holistic:
+        # ✅ model_complexity=0 para acelerar (debe coincidir con live.py)
+        with Holistic(model_complexity=0) as holistic:
             print(f'\n➡️  Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
 
             while True:
@@ -226,6 +247,14 @@ def capture_word(
 
                     else:
                         # Seña demasiado corta o idle → descartar y esperar
+                        # ✅ Diagnóstico: avisa si se descartó algo acumulado.
+                        # Si ves descartes con señas legítimas, sube DELAY_FRAMES
+                        # o baja MIN_LENGTH_FRAMES en feature_schema.py.
+                        if len(state["kp_seq"]) > 0:
+                            print(
+                                f"⚠️  Descartada: {len(state['kp_seq'])} frames "
+                                f"(mínimo requerido: {MIN_LENGTH_FRAMES + MARGIN_FRAMES})"
+                            )
                         cv2.putText(
                             frame,
                             "LISTO PARA CAPTURAR...",

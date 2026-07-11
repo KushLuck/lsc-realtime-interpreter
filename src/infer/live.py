@@ -72,6 +72,15 @@ def main(
     - ✅ Verificación de existencia del modelo antes de cargarlo, con
       mensaje claro de qué ejecutar si no está.
     - ✅ _reset_state() centralizado, igual que en capture_samples.py.
+
+    Optimización de FPS
+    -------------------
+    - ✅ Resolución bajada a 640x480 (antes 1280x720) y
+      Holistic(model_complexity=0): duplican los FPS en CPU.
+    - ⚠️ IMPORTANTE: estos dos parámetros DEBEN coincidir EXACTAMENTE con
+      capture_samples.py. Si se captura el dataset con una configuración y
+      se infiere con otra, los landmarks difieren ligeramente y reaparece
+      el gap train-vivo. Mantener ambos archivos sincronizados.
     """
 
     # ------------------------------------------------------------------
@@ -115,8 +124,9 @@ def main(
         tts.close()
         raise RuntimeError("No pude abrir la cámara.")
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    # ✅ 640x480 para duplicar FPS (debe coincidir con capture_samples.py)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
     WINDOW_NAME = "LSC Live"
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -131,7 +141,8 @@ def main(
     last_spoken_time: float = 0.0
 
     try:
-        with Holistic() as holistic:
+        # ✅ model_complexity=0 para acelerar (debe coincidir con capture_samples.py)
+        with Holistic(model_complexity=0) as holistic:
             print("\n➡️  Live inference ON | Q = salir\n")
 
             while True:
