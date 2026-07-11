@@ -119,11 +119,6 @@ def capture_word(
     state = _reset_state()
 
     try:
-<<<<<<< HEAD
-        # ✅ model_complexity=0 para acelerar (debe coincidir con live.py)
-        with Holistic(model_complexity=1) as holistic:
-            print(f'\n➡️  Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
-=======
         # complexity=1 (deteccion estable) + tracking bajo (menos parpadeo).
         # DEBE coincidir con live.py.
         with Holistic(
@@ -132,7 +127,6 @@ def capture_word(
             min_tracking_confidence=0.3,
         ) as holistic:
             print(f'\n>> Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
->>>>>>> 7feb2c932cc126039fe7b9b04d014e6c50ad8c31
 
             while True:
                 ret, frame = cap.read()

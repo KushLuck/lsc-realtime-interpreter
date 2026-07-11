@@ -110,11 +110,6 @@ def main(
     last_spoken_time = 0.0
 
     try:
-<<<<<<< HEAD
-        # ✅ model_complexity=0 para acelerar (debe coincidir con capture_samples.py)
-        with Holistic(model_complexity=1) as holistic:
-            print("\n➡️  Live inference ON | Q = salir\n")
-=======
         # complexity=1 + tracking 0.3: DEBE coincidir con capture_samples.py
         with Holistic(
             model_complexity=1,
@@ -122,7 +117,6 @@ def main(
             min_tracking_confidence=0.3,
         ) as holistic:
             print("\n>> Live inference ON | Q = salir\n")
->>>>>>> 7feb2c932cc126039fe7b9b04d014e6c50ad8c31
 
             while True:
                 ret, frame = cap.read()

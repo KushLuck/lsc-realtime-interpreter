@@ -13,13 +13,6 @@ class SchemaV1:
     name: str = "v1_pose_hands"
     n_features: int = 258
 
-<<<<<<< HEAD
-# Para v0 recomiendo 30 frames por seña (más robusto que 15)
-MODEL_FRAMES = 30
-MIN_LENGTH_FRAMES = 8   # mínimo real antes de aceptar muestra (sin contar margen)
-MARGIN_FRAMES = 2
-DELAY_FRAMES = 10
-=======
 
 # ------------------------------------------------------------------
 # Parámetros de captura / inferencia
@@ -51,4 +44,3 @@ MARGIN_FRAMES = 1
 #    de MediaPipe. Con el reset de fix_frames al reaparecer la mano (ver
 #    capture_samples.py / live.py), esto absorbe parpadeos sin cerrar señas.
 DELAY_FRAMES = 5
->>>>>>> 7feb2c932cc126039fe7b9b04d014e6c50ad8c31
