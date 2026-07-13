@@ -17,6 +17,10 @@ class SchemaV1:
 # ------------------------------------------------------------------
 # Parámetros de captura / inferencia
 # ------------------------------------------------------------------
+# Resolucion unica para captura, inferencia y medicion de FPS.
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+
 # Calibrados tomando como referencia los valores probados del repo original
 # (MODEL_FRAMES=15, min_cant_frames=5, margin_frame=1, delay_frames=3), que
 # fueron pensados para funcionar en CPU. Se ajustan ligeramente para tolerar

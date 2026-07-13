@@ -15,11 +15,14 @@ from src.features.mediapipe_holistic import (
 )
 from src.features.normalize import resample_sequence
 from src.features.feature_schema import (
+    CAMERA_WIDTH,
+    CAMERA_HEIGHT,
     MODEL_FRAMES,
     MIN_LENGTH_FRAMES,
     MARGIN_FRAMES,
     DELAY_FRAMES,
 )
+from src.app.ui import render_capture_overlay
 
 # MediaPipe drawing helpers (para visualizar landmarks)
 mp_drawing = mp.solutions.drawing_utils
@@ -84,7 +87,7 @@ def capture_word(
       la captura robusta al parpadeo de deteccion de MediaPipe.
     - Deteccion estable: model_complexity=1 + min_tracking_confidence=0.3.
       complexity=0 daba mas FPS pero desestabilizaba la deteccion (parpadeo).
-      complexity=1 con resolucion 640x480 es el punto dulce para CPU.
+      La resolucion compartida se define en feature_schema.py.
     - Normalizacion espacial heredada de extract_v1_pose_hands (invarianza
       a posicion y escala). NO se toca aqui; ocurre dentro de esa funcion.
     - Print de diagnostico al descartar senas cortas.
@@ -108,13 +111,15 @@ def capture_word(
     if not cap.isOpened():
         raise RuntimeError("No pude abrir la camara (VideoCapture(0)).")
 
-    # 640x480: mitad de la ganancia de FPS SIN costo de precision
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+
+    actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     WINDOW_NAME = f"LSC Capture | {word_id}"
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW_NAME, 1100, 700)
+    cv2.resizeWindow(WINDOW_NAME, actual_width, actual_height)
 
     state = _reset_state()
 
@@ -126,7 +131,11 @@ def capture_word(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.3,
         ) as holistic:
-            print(f'\n>> Listo para capturar: "{word_id}" | Q = salir | L = landmarks on/off\n')
+            print(
+                f'\n>> Listo para capturar: "{word_id}" '
+                f'| {actual_width}x{actual_height} '
+                '| Q = salir | L = landmarks on/off\n'
+            )
 
             while True:
                 ret, frame = cap.read()
@@ -135,6 +144,7 @@ def capture_word(
 
                 results = mediapipe_detection(frame, holistic)
                 hand_detected = there_hand(results)
+                visual_status = "LISTO"
 
                 # ----------------------------------------------------------
                 # RAMA A: hay mano
@@ -150,10 +160,7 @@ def capture_word(
                         if save_debug_frames:
                             state["raw_frames"].append(frame.copy())
 
-                    cv2.putText(
-                        frame, "CAPTURANDO...", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 80, 255), 2,
-                    )
+                    visual_status = "CAPTURANDO"
 
                 # ----------------------------------------------------------
                 # RAMA B: no hay mano
@@ -165,7 +172,11 @@ def capture_word(
                     if 0 < len(state["kp_seq"]) < MIN_LENGTH_FRAMES:
                         state["fix_frames"] += 1
                         if state["fix_frames"] < DELAY_FRAMES:
-                            cv2.imshow(WINDOW_NAME, frame)
+                            view = render_capture_overlay(
+                                frame, word_id, "PROCESANDO", show_landmarks,
+                                len(state["kp_seq"]),
+                            )
+                            cv2.imshow(WINDOW_NAME, view)
                             key = cv2.waitKey(10) & 0xFF
                             if key in [ord("q"), ord("Q")]:
                                 break
@@ -179,7 +190,11 @@ def capture_word(
                         # Periodo de gracia: espera DELAY_FRAMES antes de cerrar.
                         # `continue` (como el original) salta al siguiente frame.
                         if state["fix_frames"] < DELAY_FRAMES:
-                            cv2.imshow(WINDOW_NAME, frame)
+                            view = render_capture_overlay(
+                                frame, word_id, "PROCESANDO", show_landmarks,
+                                len(state["kp_seq"]),
+                            )
+                            cv2.imshow(WINDOW_NAME, view)
                             key = cv2.waitKey(10) & 0xFF
                             if key in [ord("q"), ord("Q")]:
                                 break
@@ -230,10 +245,6 @@ def capture_word(
                                 f"[!] Descartada: {len(state['kp_seq'])} frames "
                                 f"(minimo requerido: {MIN_LENGTH_FRAMES})"
                             )
-                        cv2.putText(
-                            frame, "LISTO PARA CAPTURAR...", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 180, 0), 2,
-                        )
                         state = _reset_state()
 
                 # ----------------------------------------------------------
@@ -241,17 +252,12 @@ def capture_word(
                 # ----------------------------------------------------------
                 if show_landmarks:
                     draw_landmarks_v1(frame, results)
-                    cv2.putText(
-                        frame, "LANDMARKS: ON (L)", (10, 65),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2,
-                    )
-                else:
-                    cv2.putText(
-                        frame, "LANDMARKS: OFF (L)", (10, 65),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2,
-                    )
 
-                cv2.imshow(WINDOW_NAME, frame)
+                view = render_capture_overlay(
+                    frame, word_id, visual_status, show_landmarks,
+                    len(state["kp_seq"]),
+                )
+                cv2.imshow(WINDOW_NAME, view)
                 key = cv2.waitKey(10) & 0xFF
                 if key in [ord("q"), ord("Q")]:
                     break
@@ -265,5 +271,5 @@ def capture_word(
 
 if __name__ == "__main__":
     words = load_words(os.path.join("models", "words.json"))
-    capture_word("hola", out_root="data", save_debug_frames=False, show_landmarks=True)
+    capture_word("por_favor", out_root="data", save_debug_frames=False, show_landmarks=True)
     print("Palabras:", words)

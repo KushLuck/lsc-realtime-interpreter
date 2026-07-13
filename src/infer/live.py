@@ -9,6 +9,7 @@ import tensorflow as tf
 from mediapipe.python.solutions.holistic import Holistic
 
 from src.infer.tts_gtts import GTTSWorker
+from src.app.ui import render_live_overlay
 
 from src.features.mediapipe_holistic import (
     mediapipe_detection,
@@ -17,6 +18,8 @@ from src.features.mediapipe_holistic import (
 )
 from src.features.normalize import resample_sequence
 from src.features.feature_schema import (
+    CAMERA_WIDTH,
+    CAMERA_HEIGHT,
     MODEL_FRAMES,
     MIN_LENGTH_FRAMES,
     MARGIN_FRAMES,
@@ -56,8 +59,8 @@ def main(
       rapido para batch=1, evita congelar el video loop.
     - Maquina de estados con periodo de gracia estilo repo original + reset
       de fix_frames al reaparecer la mano (robusto al parpadeo).
-    - complexity=1 + tracking 0.3 + resolucion 640x480: DEBE coincidir con
-      capture_samples.py o reaparece el gap train-vivo.
+    - complexity=1 + tracking 0.3 + resolucion compartida con
+      capture_samples.py para evitar el gap train-vivo.
     - Normalizacion espacial heredada de extract_v1_pose_hands.
     - try/finally garantiza liberacion de camara, ventana y TTS.
     """
@@ -95,19 +98,23 @@ def main(
         tts.close()
         raise RuntimeError("No pude abrir la camara.")
 
-    # 640x480: DEBE coincidir con capture_samples.py
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+
+    actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     WINDOW_NAME = "LSC Live"
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW_NAME, 1100, 700)
+    cv2.resizeWindow(WINDOW_NAME, actual_width, actual_height)
 
     # 4. Estado
     state = _reset_state()
     sentence = []
     last_spoken = None
     last_spoken_time = 0.0
+    last_prediction = None
+    last_confidence = None
 
     try:
         # complexity=1 + tracking 0.3: DEBE coincidir con capture_samples.py
@@ -116,7 +123,10 @@ def main(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.3,
         ) as holistic:
-            print("\n>> Live inference ON | Q = salir\n")
+            print(
+                f"\n>> Live inference ON | {actual_width}x{actual_height} "
+                "| Q = salir\n"
+            )
 
             while True:
                 ret, frame = cap.read()
@@ -125,6 +135,7 @@ def main(
 
                 results = mediapipe_detection(frame, holistic)
                 hand_detected = there_hand(results)
+                visual_status = "LISTO"
 
                 # ------------------------------------------------------
                 # RAMA A: hay mano
@@ -137,10 +148,7 @@ def main(
                     if state["count_frame"] > MARGIN_FRAMES:
                         state["kp_seq"].append(extract_v1_pose_hands(results))
 
-                    cv2.putText(
-                        frame, "LEYENDO SENA...", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 80, 255), 2,
-                    )
+                    visual_status = "LEYENDO SENA"
 
                 # ------------------------------------------------------
                 # RAMA B: no hay mano
@@ -151,13 +159,11 @@ def main(
                     if 0 < len(state["kp_seq"]) < MIN_LENGTH_FRAMES:
                         state["fix_frames"] += 1
                         if state["fix_frames"] < DELAY_FRAMES:
-                            h, w = frame.shape[:2]
-                            cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
-                            cv2.putText(
-                                frame, " | ".join(sentence), (10, 75),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2,
+                            view = render_live_overlay(
+                                frame, sentence, "PROCESANDO",
+                                last_prediction, last_confidence,
                             )
-                            cv2.imshow(WINDOW_NAME, frame)
+                            cv2.imshow(WINDOW_NAME, view)
                             if cv2.waitKey(10) & 0xFF in [ord("q"), ord("Q")]:
                                 break
                             continue
@@ -168,13 +174,11 @@ def main(
                         # Gracia: espera DELAY_FRAMES antes de inferir.
                         if state["fix_frames"] < DELAY_FRAMES:
                             # Render + teclas antes de saltar
-                            h, w = frame.shape[:2]
-                            cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
-                            cv2.putText(
-                                frame, " | ".join(sentence), (10, 75),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2,
+                            view = render_live_overlay(
+                                frame, sentence, "PROCESANDO",
+                                last_prediction, last_confidence,
                             )
-                            cv2.imshow(WINDOW_NAME, frame)
+                            cv2.imshow(WINDOW_NAME, view)
                             if cv2.waitKey(10) & 0xFF in [ord("q"), ord("Q")]:
                                 break
                             continue
@@ -191,6 +195,8 @@ def main(
                         idx = int(np.argmax(probs))
                         conf = float(probs[idx])
                         pred_word = used_words[idx]
+                        last_prediction = pred_word
+                        last_confidence = conf
 
                         if show_debug:
                             print(f"Pred: {pred_word} | conf={conf:.2f}")
@@ -214,23 +220,16 @@ def main(
                         state = _reset_state()
 
                     else:
-                        cv2.putText(
-                            frame, "LISTO...", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 180, 0), 2,
-                        )
                         state = _reset_state()
 
                 # ------------------------------------------------------
                 # Overlay: barra de texto con la oracion detectada
                 # ------------------------------------------------------
-                h, w = frame.shape[:2]
-                cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
-                cv2.putText(
-                    frame, " | ".join(sentence), (10, 75),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2,
+                view = render_live_overlay(
+                    frame, sentence, visual_status,
+                    last_prediction, last_confidence,
                 )
-
-                cv2.imshow(WINDOW_NAME, frame)
+                cv2.imshow(WINDOW_NAME, view)
                 if cv2.waitKey(10) & 0xFF in [ord("q"), ord("Q")]:
                     break
 

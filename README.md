@@ -36,3 +36,8 @@ pip install -r requirements.txt
 python -m src.capture.capture_samples
 python -m src.train.train
 python -m src.infer.live
+```
+```bash
+python -m tools.clear_samples --list  
+```
+La captura de muestras, la inferencia y la prueba de FPS usan 1280x720.

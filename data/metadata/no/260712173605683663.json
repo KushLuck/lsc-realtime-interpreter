@@ -1,0 +1,8 @@
+{
+  "word_id": "no",
+  "sample_id": "260712173605683663",
+  "schema": "v1_pose_hands",
+  "n_features": 258,
+  "model_frames": 15,
+  "captured_frames_raw": 28
+}

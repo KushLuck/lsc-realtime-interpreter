@@ -1,15 +1,35 @@
 {
   "used_words": [
     "hola",
+    "adios",
     "gracias",
-    "como_estas"
+    "por_favor",
+    "perdon",
+    "si",
+    "no",
+    "bien",
+    "mal",
+    "como_estas",
+    "buenos_dias",
+    "buenas_tardes",
+    "buenas_noches"
   ],
   "word_to_idx": {
     "hola": 0,
-    "gracias": 1,
-    "como_estas": 2
+    "adios": 1,
+    "gracias": 2,
+    "por_favor": 3,
+    "perdon": 4,
+    "si": 5,
+    "no": 6,
+    "bien": 7,
+    "mal": 8,
+    "como_estas": 9,
+    "buenos_dias": 10,
+    "buenas_tardes": 11,
+    "buenas_noches": 12
   },
   "timesteps": 15,
   "n_features": 258,
-  "n_classes": 3
+  "n_classes": 13
 }

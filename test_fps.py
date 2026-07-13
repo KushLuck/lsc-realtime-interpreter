@@ -3,10 +3,11 @@ import time
 import cv2
 from mediapipe.python.solutions.holistic import Holistic
 from src.features.mediapipe_holistic import mediapipe_detection
+from src.features.feature_schema import CAMERA_WIDTH, CAMERA_HEIGHT
 
 cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
 
 if not cap.isOpened():
     raise RuntimeError("No pude abrir la cámara.")

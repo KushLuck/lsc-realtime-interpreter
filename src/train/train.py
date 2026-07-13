@@ -96,17 +96,20 @@ def main():
     # 5. Callbacks
     # ------------------------------------------------------------------
     callbacks = [
-        # ✅ Guarda el mejor modelo por val_accuracy durante el entrenamiento.
+        # Guarda el modelo con menor val_loss. La accuracy puede empatar desde
+        # una epoca temprana aunque sus probabilidades aun tengan poca confianza.
         # Si el proceso se interrumpe, lsc_v0_best.keras conserva el mejor
         # checkpoint alcanzado hasta ese momento.
         tf.keras.callbacks.ModelCheckpoint(
             filepath=best_model_path,
-            monitor="val_accuracy",
+            monitor="val_loss",
+            mode="min",
             save_best_only=True,
             verbose=1,
         ),
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_accuracy",
+            monitor="val_loss",
+            mode="min",
             patience=12,
             restore_best_weights=True,
             verbose=1,
@@ -178,7 +181,7 @@ def main():
     # ------------------------------------------------------------------
     # 11. Reporte final
     # ------------------------------------------------------------------
-    best_epoch   = int(np.argmax(history.history["val_accuracy"]))
+    best_epoch   = int(np.argmin(history.history["val_loss"]))
     best_val_acc = history.history["val_accuracy"][best_epoch]
     best_val_loss = history.history["val_loss"][best_epoch]
 

@@ -1,0 +1,8 @@
+{
+  "word_id": "gracias",
+  "sample_id": "260713022100173313",
+  "schema": "v1_pose_hands",
+  "n_features": 258,
+  "model_frames": 15,
+  "captured_frames_raw": 16
+}
