@@ -1,4 +1,3 @@
-````md
 # Dataset colaborativo (keypoints + metadata)
 
 Este repositorio versiona **solo**:
@@ -20,7 +19,7 @@ La idea es que el equipo capture datos livianos y los suba al repositorio para e
 ```bash
 git clone <URL_DEL_REPO_PRIVADO>
 cd lsc-realtime-interpreter
-````
+```
 
 ### 1.2 Crear y activar entorno virtual (Python 3.11 recomendado)
 
@@ -145,6 +144,3 @@ python -m src.infer.live
 * No subir `.venv/`
 * No subir `data/raw_frames/` ni `data/raw_videos/`
 * Subir datos siempre por rama + Pull Request
-
-```
-```

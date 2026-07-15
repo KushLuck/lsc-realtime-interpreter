@@ -134,7 +134,8 @@ def main():
 
     print("\n=== Accuracy por clase ===")
     for word, acc_c in sorted(zip(used_words, per_class_acc), key=lambda x: x[1]):
-        bar = "█" * int(acc_c * 20)
+        # ASCII para funcionar también en consolas Windows con CP1252.
+        bar = "#" * int(acc_c * 20)
         print(f"  {word:<20} {acc_c:.2f}  {bar}")
 
 

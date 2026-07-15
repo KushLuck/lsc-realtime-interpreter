@@ -21,7 +21,8 @@ Objetivo: escalar a un vocabulario de **20 palabras** (saludos, cortesía y expr
 4. Prueba en vivo (texto + voz)
 
 ## Reglas del repositorio
-- **No subir datos**: la carpeta `data/` (muestras, keypoints, videos, metadata) no se versiona por privacidad y tamaño.
+- **Datos derivados versionados**: se versionan únicamente `data/keypoints_v1/` y `data/metadata/`, necesarios para entrenar el modelo común.
+- **No subir datos crudos**: no se versionan videos ni frames de cámara (`data/raw_videos/` y `data/raw_frames/`) por privacidad y tamaño.
 - **No subir entornos**: no subir `.venv/`, `venv/`, `__pycache__/` ni archivos temporales.
 - **Cambios por ramas**: cada tarea se trabaja en una rama (`feature/...`, `fix/...`, `docs/...`) y se integra por Pull Request.
 - **Evitar push directo a main**: lo ideal es que `main` quede protegido y solo se actualice por PR.
@@ -37,7 +38,26 @@ python -m src.capture.capture_samples
 python -m src.train.train
 python -m src.infer.live
 ```
+
 ```bash
 python -m tools.clear_samples --list  
 ```
-La captura de muestras, la inferencia y la prueba de FPS usan 1280x720.
+
+Para generar las gráficas y métricas de la evaluación sin reentrenar:
+
+```bash
+python -m src.train.plots
+```
+
+Los archivos se guardan en `results/`.
+
+La captura de muestras y la inferencia usan 1280x720.
+
+## Estado actual
+
+- Vocabulario: 20 palabras.
+- Dataset: 1688 muestras de keypoints normalizados.
+- Mejor validación interna registrada: 99.21 % de accuracy.
+- El prototipo también se ha comprobado en vivo con una persona distinta de quien capturó el dataset.
+
+La métrica corresponde a una partición interna del dataset y sirve para verificar el prototipo actual. Una evaluación con más participantes y sesiones queda como trabajo futuro para medir formalmente la generalización.
